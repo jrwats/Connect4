@@ -40,24 +40,24 @@ export function applyAIMove(state: GameState, move: AIMove): GameState | null {
 // ─── Evaluation ──────────────────────────────────────────────────────────────
 
 /**
- * Score a window of 4 cells from the perspective of `aiPiece`.
- * Any blocker in the window makes it useless for both players.
+ * Score a slice of 4 cells from the perspective of `aiPiece`.
+ * Any blocker in the slice makes it useless for both players.
  */
-function scoreWindow(
-  window: CellValue[],
+function scoreSlice(
+  slice: CellValue[],
   aiPiece: CellValue,
   humanPiece: CellValue
 ): number {
-  // Blockers neutralise the window completely
-  if (window.some((c) => c === 'blocker1' || c === 'blocker2')) return 0;
+  // Blockers neutralise the slice completely
+  if (slice.some((c) => c === 'blocker1' || c === 'blocker2')) return 0;
 
-  const ai = window.filter((c) => c === aiPiece).length;
-  const human = window.filter((c) => c === humanPiece).length;
+  const ai = slice.filter((c) => c === aiPiece).length;
+  const human = slice.filter((c) => c === humanPiece).length;
 
-  // Mixed window — neither side can complete a 4 through here
+  // Mixed slice — neither side can complete a 4 through here
   if (ai > 0 && human > 0) return 0;
 
-  const empty = window.filter((c) => c === 'empty').length;
+  const empty = slice.filter((c) => c === 'empty').length;
 
   if (ai > 0) {
     if (ai === 4) return 100_000;
@@ -94,7 +94,7 @@ function evaluate(board: CellValue[][], aiPlayer: Player): number {
   // Horizontal
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col <= COLS - 4; col++) {
-      score += scoreWindow(
+      score += scoreSlice(
         [board[row][col], board[row][col + 1], board[row][col + 2], board[row][col + 3]],
         aiPiece,
         humanPiece
@@ -105,7 +105,7 @@ function evaluate(board: CellValue[][], aiPlayer: Player): number {
   // Vertical
   for (let col = 0; col < COLS; col++) {
     for (let row = 0; row <= ROWS - 4; row++) {
-      score += scoreWindow(
+      score += scoreSlice(
         [board[row][col], board[row + 1][col], board[row + 2][col], board[row + 3][col]],
         aiPiece,
         humanPiece
@@ -116,7 +116,7 @@ function evaluate(board: CellValue[][], aiPlayer: Player): number {
   // Diagonal ↘
   for (let row = 0; row <= ROWS - 4; row++) {
     for (let col = 0; col <= COLS - 4; col++) {
-      score += scoreWindow(
+      score += scoreSlice(
         [
           board[row][col],
           board[row + 1][col + 1],
@@ -132,7 +132,7 @@ function evaluate(board: CellValue[][], aiPlayer: Player): number {
   // Diagonal ↙
   for (let row = 0; row <= ROWS - 4; row++) {
     for (let col = 3; col < COLS; col++) {
-      score += scoreWindow(
+      score += scoreSlice(
         [
           board[row][col],
           board[row + 1][col - 1],
@@ -155,7 +155,6 @@ function evaluate(board: CellValue[][], aiPlayer: Player): number {
  * Used to prioritise obvious moves before running full minimax.
  */
 function findImmediateWin(state: GameState, player: Player): number {
-  const piece: CellValue = player === 1 ? 'player1' : 'player2';
   for (const col of getValidCols(state.board)) {
     const result = applyAIMove(
       { ...state, currentPlayer: player, usingBlocker: false, phase: 'normal' },
@@ -178,49 +177,54 @@ function minimax(
   const humanPlayer: Player = aiPlayer === 1 ? 2 : 1;
 
   // Terminal checks
-  if (state.winner === aiPlayer) return 90_000 + depth;
-  if (state.winner === humanPlayer) return -90_000 - depth;
-  if (state.winner === 'draw') return 0;
-  if (depth === 0) return evaluate(state.board, aiPlayer);
+  if (state.winner === aiPlayer) {
+    return 90_000 + depth;
+  } else if (state.winner === humanPlayer) {
+    return -90_000 - depth;
+  } else if (state.winner === 'draw') {
+    return 0;
+  } else if (depth === 0) {
+    return evaluate(state.board, aiPlayer);
+  }
 
   const moves = generateMoves(state);
   if (moves.length === 0) {
     // Shouldn't happen if winner checks above are correct, but handle gracefully
     const { winner } = checkWinner(state.board);
-    if (winner === aiPlayer) return 90_000 + depth;
-    if (winner !== null) return -90_000 - depth;
-    if (checkDraw(state.board)) return 0;
+    if (winner === aiPlayer) {
+      return 90_000 + depth;
+    } else if (winner !== null) {
+      return -90_000 - depth;
+    } else if (checkDraw(state.board)) {
+      return 0;
+    }
     return 0;
   }
 
-  // Order moves: centre columns first → better alpha-beta pruning
-  const ordered = [...moves].sort(
+  // Order moves by proximity to center column. Yields more efficient alpha-beta pruning
+  const sortedMoves = [...moves].sort(
     (a, b) => Math.abs(a.col - 3) - Math.abs(b.col - 3)
   );
 
-  const maximising = state.currentPlayer === aiPlayer;
-
-  if (maximising) {
-    let best = -Infinity;
-    for (const move of ordered) {
-      const next = applyAIMove(state, move);
-      if (!next) continue;
-      best = Math.max(best, minimax(next, depth - 1, alpha, beta, aiPlayer));
-      alpha = Math.max(alpha, best);
-      if (beta <= alpha) break;
+  const maximizing = state.currentPlayer === aiPlayer;
+  let best = maximizing ? -Infinity : Infinity;
+  let findBest = maximizing ? Math.max : Math.min;
+  const update = maximizing 
+    ? (best: number) => { alpha = Math.max(alpha, best); }
+    : (best: number) => { beta = Math.min(beta, best); };
+  for (const move of sortedMoves) {
+    const next = applyAIMove(state, move);
+    if (next == null) {
+      continue;
     }
-    return best;
-  } else {
-    let best = Infinity;
-    for (const move of ordered) {
-      const next = applyAIMove(state, move);
-      if (!next) continue;
-      best = Math.min(best, minimax(next, depth - 1, alpha, beta, aiPlayer));
-      beta = Math.min(beta, best);
-      if (beta <= alpha) break;
+    best = findBest(best, minimax(next, depth - 1, alpha, beta, aiPlayer));
+    update(best); // Update beta or alpha value
+    if (alpha >= beta) {
+      // We no longer need to keep exploring this tree
+      break;
     }
-    return best;
   }
+  return best;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -261,14 +265,14 @@ export function getBestMove(
   }
 
   // ── Full minimax ─────────────────────────────────────────────────────────
-  const ordered = [...moves].sort(
+  const sortedMoves = [...moves].sort(
     (a, b) => Math.abs(a.col - 3) - Math.abs(b.col - 3)
   );
 
-  let bestMove = ordered[0];
+  let bestMove = sortedMoves[0];
   let bestScore = -Infinity;
 
-  for (const move of ordered) {
+  for (const move of sortedMoves) {
     const next = applyAIMove(state, move);
     if (!next) continue;
     const score = minimax(next, depth - 1, -Infinity, Infinity, aiPlayer);
