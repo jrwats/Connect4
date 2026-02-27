@@ -12,6 +12,14 @@ body {
   display: flex;
   justify-content: center;
   padding: 24px 16px 40px;
+  overflow-x: hidden;
+}
+
+@media (max-width: 400px) {
+  body {
+    padding-top: 12px;
+    padding-bottom: 20px;
+  }
 }
 
 #root {

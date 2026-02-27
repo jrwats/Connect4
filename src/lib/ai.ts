@@ -22,13 +22,9 @@ function generateMoves(state: GameState): AIMove[] {
   }
 
   const moves: AIMove[] = validCols.map((col) => ({ col, useBlocker: false }));
-
   if (state.blockersRemaining[state.currentPlayer] > 0) {
-    for (const col of validCols) {
-      moves.push({ col, useBlocker: true });
-    }
+    moves.push(...validCols.map((col) => ({col, useBlocker: true})));
   }
-
   return moves;
 }
 
@@ -274,7 +270,9 @@ export function getBestMove(
 
   for (const move of sortedMoves) {
     const next = applyAIMove(state, move);
-    if (!next) continue;
+    if (next == null) {
+      continue;
+    }
     const score = minimax(next, depth - 1, -Infinity, Infinity, aiPlayer);
     if (score > bestScore) {
       bestScore = score;

@@ -32,6 +32,7 @@ export default function App() {
   const [hoverCol, setHoverCol] = useState<number | null>(null);
   const [isThinking, setIsThinking] = useState(false);
   const thinkingRef = useRef(false);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   // ── AI turn ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -90,6 +91,16 @@ export default function App() {
       return;
     setState((s) => ({ ...s, usingBlocker: !s.usingBlocker }));
   }, [state, isThinking]);
+
+  // Maps a Touch point to a column index using the board element's bounds.
+  const colFromTouch = useCallback((t: React.Touch): number | null => {
+    if (!boardRef.current) return null;
+    const r = boardRef.current.getBoundingClientRect();
+    const x = t.clientX - r.left - 8; // subtract 8px board padding
+    const innerW = r.width - 16;       // subtract padding on both sides
+    if (x < 0 || x > innerW) return null;
+    return Math.min(COLS - 1, Math.floor((x * COLS) / innerW));
+  }, []);
 
   const resetGame = useCallback(() => {
     thinkingRef.current = false;
@@ -185,6 +196,9 @@ export default function App() {
       <div
         className="board-wrap"
         onMouseLeave={() => setHoverCol(null)}
+        onTouchStart={e => setHoverCol(colFromTouch(e.touches[0]))}
+        onTouchMove={e => setHoverCol(colFromTouch(e.touches[0]))}
+        onTouchEnd={() => setHoverCol(null)}
       >
         {/* Per-column interactive strips */}
         <div className="col-strips">
@@ -212,7 +226,7 @@ export default function App() {
         </div>
 
         {/* Board frame + cells */}
-        <div className="board">
+        <div className="board" ref={boardRef}>
           {Array.from({ length: ROWS }, (_, row) =>
             Array.from({ length: COLS }, (_, col) => {
               const cell = state.board[row][col];
